@@ -47,17 +47,24 @@ function! s:RunTest()
     let full_filename=expand("%:t")
     let filename_only=expand("%:t:r")
     let extension=expand("%:e")
+    let path=expand("%:h")
 
     " set test file name
+    let current_directory=getcwd()
     if s:IsTestFile(full_filename)
-    let test_filename = s:RemoveExtension(full_filename)
+        let test_filename = s:RemoveExtension(full_filename)
+        let testing_directory = path .'/../'
     else
-    let test_filename = s:test_filename_prefix . filename_only . s:test_filename_suffix
+        let test_filename = s:test_filename_prefix . filename_only . s:test_filename_suffix
+        let testing_directory = path .'/'
     endif
 
     " run test: !python -m test.file_to_test
+    "echo testing_directory
     let test_command = s:test_command_prefix . test_filename . s:test_command_suffix
+    execute 'lcd ' .testing_directory
     execute test_command
+    execute 'lcd ' .current_directory
 endfunction
 
 " return 1 if given filename is test file, 0 if not
