@@ -1,6 +1,5 @@
 " TODO
-" reserve line number per file when changing
-"
+"  - show error in quickfix
 
 let s:test_directory='test'
 
@@ -17,29 +16,34 @@ function! s:TestFile()
     let full_filename=expand("%:t")
     "let full_path=getcwd().'/'. expand("%:h")
     let path=expand("%:h")
+    if empty(path)
+        let path='.'
+    endif
     let filename_only=expand("%:t:r")
     let extension=expand("%:e")
 
     " set alternate file name
     if s:IsTestFile(full_filename)
-    let a_filename = substitute(full_filename, s:test_filename_prefix .'\(.*\)'. s:test_filename_suffix, '\1', '')
-    "let a_path = getcwd().'/'
-    let a_path = path.'/../'
+        let a_filename = substitute(full_filename, s:test_filename_prefix .'\(.*\)'. s:test_filename_suffix, '\1', '')
+        "let a_path = getcwd().'/'
+        let a_path = path.'/../'
     else
-    let a_filename = s:test_filename_prefix . filename_only . s:test_filename_suffix. ".".extension
+        let a_filename = s:test_filename_prefix . filename_only . s:test_filename_suffix. ".".extension
     "let a_path = full_path.'/'. s:test_directory .'/'
-    let a_path = path.'/'. s:test_directory .'/'
+        let a_path = path.'/'. s:test_directory .'/'
     endif
+    echo a_path
+    echo a_filename
 
     " check if file exists
     let full_a_filepath = a_path . a_filename
     let file_exists = filereadable(full_a_filepath)
     if file_exists
-    call s:SaveCurrentLine()
-    execute("e " . a_path . a_filename)
-    call s:LoadLastLine()
+        call s:SaveCurrentLine()
+        execute("e " . a_path . a_filename)
+        call s:LoadLastLine()
     else
-    echoerr "Cannot find file: " . full_a_filepath
+        echoerr "Cannot find file: " . full_a_filepath
     end
 endfunction
 
@@ -61,6 +65,7 @@ function! s:RunTest()
 
     " run test: !python -m test.file_to_test
     "echo testing_directory
+    let tempfile = tempname()
     let test_command = s:test_command_prefix . test_filename . s:test_command_suffix
     execute 'lcd ' .testing_directory
     execute test_command
