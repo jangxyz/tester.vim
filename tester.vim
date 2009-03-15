@@ -11,6 +11,45 @@ let s:test_command_suffix=''
 
 let s:last_line_saves={}
 
+" ./somefile.ext => ./somefile_test.ext
+function! s:ConvertFilename2TestFilename(filename)
+    let [name, ext] = s:SplitFilename(a:filename)
+    return s:test_filename_prefix .name. s:test_filename_suffix. ".".ext
+endfunction
+
+" ./somefile_test.ext => ./somefile.ext
+function! s:ConvertTestFilename2Filename(filename)
+    return substitute(a:filename, s:test_filename_prefix .'\(.*\)'. s:test_filename_suffix, '\1', '')
+endfunction
+
+
+" ./somepath/ => ./somepath/test/
+function! s:ConvertPath2TestPath(path)
+    let result = a:path.'/'. s:test_directory .'/'
+    let duplication_removed = substitute(result, '/\+', '/', '')
+    return duplication_removed
+endfunction
+
+" ./somepath/test/ => ./somepath
+function! s:ConvertTestPath2Path(path)
+    return substitute(simplify(a:path), 'test/\?$', '', "")
+endfunction
+
+
+" return list of name and extension
+function! s:SplitFilename(filename)
+    let pattern = '\(.*\)\.\([^.]*\)'
+    let name = substitute(a:filename, pattern, '\1', "")
+    let ext  = substitute(a:filename, pattern, '\2', "")
+    return [name, ext]
+endfunction
+
+
+function! s:OpenFile(filepath)
+    execute("e " . a:filepath)
+endfunction
+
+
 " change to the test file of the source code, or vice versa
 function! s:TestFile()
     let full_filename=expand("%:t")
@@ -19,29 +58,22 @@ function! s:TestFile()
     if empty(path)
         let path='.'
     endif
-    let filename_only=expand("%:t:r")
-    let extension=expand("%:e")
 
-    " set alternate file name
+    " set alternate file name and path
     if s:IsTestFile(full_filename)
-        let a_filename = substitute(full_filename, s:test_filename_prefix .'\(.*\)'. s:test_filename_suffix, '\1', '')
-        "let a_path = getcwd().'/'
-        let a_path = path.'/../'
+        let a_filename = s:ConvertTestFilename2Filename(full_filename)
+        let a_path = s:ConvertTestPath2Path(path)
     else
-        let a_filename = s:test_filename_prefix . filename_only . s:test_filename_suffix. ".".extension
-    "let a_path = full_path.'/'. s:test_directory .'/'
-        let a_path = path.'/'. s:test_directory .'/'
+        let a_filename = s:ConvertFilename2TestFilename(full_filename)
+        let a_path = s:ConvertPath2TestPath(path)
     endif
-    echo a_path
-    echo a_filename
 
     " check if file exists
     let full_a_filepath = a_path . a_filename
-    let file_exists = filereadable(full_a_filepath)
-    if file_exists
-        call s:SaveCurrentLine()
-        execute("e " . a_path . a_filename)
-        call s:LoadLastLine()
+    if filereadable(full_a_filepath)
+        call s:SaveCurrentLine()         " save current position
+        call s:OpenFile(full_a_filepath)
+        call s:LoadLastLine()            " load position, if previously saved
     else
         echoerr "Cannot find file: " . full_a_filepath
     end
@@ -66,16 +98,23 @@ function! s:RunTest()
     " run test: !python -m test.file_to_test
     "echo testing_directory
     let tempfile = tempname()
+    echo tempfile
     let test_command = s:test_command_prefix . test_filename . s:test_command_suffix
     execute 'lcd ' .testing_directory
-    execute test_command
+    execute test_command .' &> '. tempfile
     execute 'lcd ' .current_directory
 endfunction
 
+" returns 1 if given string has 'test', ignoring case
+" returns 0 if not
+function! s:HasWordTest(filename)
+    let matched_index = match(a:filename, '\ctest')
+    return matched_index != -1
+endfunction
+
 " return 1 if given filename is test file, 0 if not
-function! s:IsTestFile(full_filename)
-    let s:test_idx = stridx(a:full_filename, s:test_filename_suffix .'.')
-    return s:test_idx == -1 ? 0 : 1
+function! s:IsTestFile(filename)
+    return s:HasWordTest(a:filename)
 endfunction
 
 function! s:RemoveExtension(filename)
