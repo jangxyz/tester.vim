@@ -51,33 +51,47 @@ endfunction
 UTSuite "[tester] changing path to test path and vice versa"
 
 function! s:TestConvertPathIntoTestPath()
-    let path='./'
-    Assert <SNR>47_ConvertPath2TestPath(path) == "./test/"
+    let path='/some/path/'
+    Assert <SNR>47_ConvertPath2TestPath(path) == "/some/path/test/"
 endfunction
 
 function! s:TestConvertPathIntoTestPathRemovesDuplicateSlashes()
-    let path='.//'
-    Assert <SNR>47_ConvertPath2TestPath(path) == "./test/"
+    let path='/some/path//'
+    Assert <SNR>47_ConvertPath2TestPath(path) == "/some/path/test/"
 endfunction
 
+function! s:TestConvertPathIntoTestPathConvertsToAbsPathIfRelative()
+    " let's say you are currently at /some/path
+    let cwd=substitute(getcwd(), '/$', '', "")
+
+    let path=''
+    echo <SNR>47_ConvertPath2TestPath(path)
+    Assert <SNR>47_ConvertPath2TestPath(path) == cwd ."/test/"
+endfunction
+
+
 function! s:TestConvertTestPathIntoPathRemoves_test_AtEnd()
-    let path='somepath/test'
-    Assert <SNR>47_ConvertTestPath2Path(path) == "somepath/"
+    let path='/some/path/test'
+    Assert <SNR>47_ConvertTestPath2Path(path) == "/some/path/"
 endfunction
 
 function! s:TestConvertTestPathIntoPathWorksRegardlessOfSlashAtEnd()
-    let path='somepath/test/'
-    Assert <SNR>47_ConvertTestPath2Path(path) == "somepath/"
+    let path='/some/path/test/'
+    Assert <SNR>47_ConvertTestPath2Path(path) == "/some/path/"
 endfunction
 
 function! s:TestConvertTestPathIntoPathOnlyRemovesFinal_test()
-    let path='somepath/test/final/test/'
-    Assert <SNR>47_ConvertTestPath2Path(path) == "somepath/test/final/"
+    let path='/some/path/test/final/test/'
+    Assert <SNR>47_ConvertTestPath2Path(path) == "/some/path/test/final/"
 endfunction
 
-function! s:TestConvertTestPathIntoPathCanReadRelativePath()
-    let path='somepath/test/dir/..'
-    Assert <SNR>47_ConvertTestPath2Path(path) == "somepath/"
+function! s:TestConvertTestPathIntoPathCanReadSimplifyPath()
+    let path='/some/path/test/dir/..'
+    Assert <SNR>47_ConvertTestPath2Path(path) == "/some/path/"
+endfunction
+
+function! s:TestConvertTestPathIntoPathCanApplyRelativePath()
+    let path='relative/path'
 endfunction
 
 " -----------------------------------------------------------------------------

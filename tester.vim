@@ -23,17 +23,24 @@ function! s:ConvertTestFilename2Filename(filename)
 endfunction
 
 
+" add test directory to path
 " ./somepath/ => ./somepath/test/
 function! s:ConvertPath2TestPath(path)
-    let result = a:path.'/'. s:test_directory .'/'
-    let duplication_removed = substitute(result, '/\+', '/', '')
+    " relative path
+    let path = fnamemodify(a:path, ":p")
+
+    let result = path.'/'. s:test_directory .'/'
+    let duplication_removed = substitute(result, '//\+', '/', "")
     return duplication_removed
 endfunction
 
+" strip test at the end if exist
 " ./somepath/test/ => ./somepath
 function! s:ConvertTestPath2Path(path)
     return substitute(simplify(a:path), 'test/\?$', '', "")
 endfunction
+
+
 
 
 " return list of name and extension
@@ -54,7 +61,7 @@ endfunction
 function! s:TestFile()
     let full_filename=expand("%:t")
     "let full_path=getcwd().'/'. expand("%:h")
-    let path=expand("%:h")
+    let path=expand("%:p:h")
     if empty(path)
         let path='.'
     endif
@@ -79,30 +86,35 @@ function! s:TestFile()
     end
 endfunction
 
+function! s:GenerateTestCommand(test_name)
+    return s:test_command_prefix . a:test_name . s:test_command_suffix
+endfunction
+
+function! s:RunTestCommand(testing_directory, test_name)
+    let tempfile = tempname()
+    let test_command = s:GenerateTestCommand(a:test_name)
+    let current_directory=getcwd()
+
+    execute 'lcd '. a:testing_directory
+    execute test_command .' &> '. tempfile
+    execute 'lcd '. current_directory
+endfunction
+
 function! s:RunTest()
     let full_filename=expand("%:t")
-    let filename_only=expand("%:t:r")
-    let extension=expand("%:e")
-    let path=expand("%:h")
+    let path=expand("%:p:h")
 
     " set test file name
-    let current_directory=getcwd()
     if s:IsTestFile(full_filename)
-        let test_filename = s:RemoveExtension(full_filename)
-        let testing_directory = path .'/../'
+        let test_name = s:RemoveExtension(full_filename)
+        let testing_directory = s:ConvertTestPath2Path(path)
     else
-        let test_filename = s:test_filename_prefix . filename_only . s:test_filename_suffix
-        let testing_directory = path .'/'
+        let test_name = s:RemoveExtension(s:ConvertFilename2TestFilename(full_filename))
+        let testing_directory = path
     endif
 
     " run test: !python -m test.file_to_test
-    "echo testing_directory
-    let tempfile = tempname()
-    echo tempfile
-    let test_command = s:test_command_prefix . test_filename . s:test_command_suffix
-    execute 'lcd ' .testing_directory
-    execute test_command .' &> '. tempfile
-    execute 'lcd ' .current_directory
+    call s:RunTestCommand(testing_directory, test_name)
 endfunction
 
 " returns 1 if given string has 'test', ignoring case
