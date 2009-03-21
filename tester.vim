@@ -9,8 +9,8 @@ let s:test_filename_suffix='_test'
 "let s:test_filename_prefix='test_'
 "let s:test_filename_suffix=''
 
-"let s:test_command='unittest'
-let s:test_command='testoob'
+let s:test_command='unittest'
+"let s:test_command='testoob'
 
 let s:default_alltests_py = "python -c \"import unittest, sys, os, re; sys.path.append(os.curdir); t_py_re = re.compile('^t(est)?_.*\.py$'); is_test = lambda filename: t_py_re.match(filename); drop_dot_py = lambda filename: filename[:-3]; modules_to_test = [drop_dot_py(module) for module in filter(is_test, os.listdir(os.curdir))]; print 'Testing', ', '.join(modules_to_test); alltests = unittest.TestSuite(); [alltests.addTest(unittest.findTestCases(module)) for module in map(__import__, modules_to_test)]; call_alltests = lambda: alltests; unittest.main(defaultTest='call_alltests')\""
 
