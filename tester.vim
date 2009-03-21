@@ -17,7 +17,8 @@ function! s:GenerateTestCommand(test_name, test_suit, test_case)
     else
         let test_arg = a:test_suit . a:test_case
     endif
-    return s:test_command_prefix . a:test_name ." ". test_arg . s:test_command_suffix
+    return './alltests.py ' . a:test_name ." ". test_arg . s:test_command_suffix
+    "return s:test_command_prefix . a:test_name ." ". test_arg . s:test_command_suffix
 endfunction
 
 " ./somefile.ext => ./somefile_test.ext
