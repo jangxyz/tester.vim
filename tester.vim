@@ -6,80 +6,44 @@ let s:test_directory='test'
 let s:test_filename_prefix=''
 let s:test_filename_suffix='_test'
 
-let s:test_command_prefix='testoob '
-let s:test_command_suffix=''
+"let s:test_command='unittest'
+let s:test_command='testoob'
+
+let s:default_alltests_script_name = "./alltests.py"
+let s:default_alltests_py = "python -c \"import unittest, sys, os, re; sys.path.append(os.curdir); t_py_re = re.compile('^t(est)?_.*\.py$'); is_test = lambda filename: t_py_re.match(filename); drop_dot_py = lambda filename: filename[:-3]; modules_to_test = [drop_dot_py(module) for module in filter(is_test, os.listdir(os.curdir))]; print 'Testing', ', '.join(modules_to_test); alltests = unittest.TestSuite(); [alltests.addTest(unittest.findTestCases(module)) for module in map(__import__, modules_to_test)]; call_alltests = lambda: alltests; unittest.main(defaultTest='call_alltests')\""
 
 let s:last_line_saves={}
 
-function! s:GenerateTestCommand(test_name, test_suit, test_case)
-    if !empty(a:test_suit) && !empty(a:test_case)
-        let test_arg = a:test_suit .".". a:test_case     
-    else
-        let test_arg = a:test_suit . a:test_case
+function! s:GenerateTestCommand(test_file, test_case, test_method)
+    let function_name = s:test_command == "testoob" ? "s:BuildTestOOBCommand" : "s:BuildTestCommand"
+    return function(function_name)(a:test_file, a:test_case, a:test_method)
+endfunction
+"
+function! s:BuildTestCommand(test_file, test_case, test_method)
+    let test_module = s:RemoveExtension(a:test_file)
+
+    let first_arg  = "'". test_module ."'"
+    let second_arg = empty(a:test_method) ? a:test_case : a:test_case .".". a:test_method
+    let arg_tuple  = empty(second_arg) ? first_arg : first_arg .", '". second_arg ."'"
+
+    let cmd = "python -c \"import unittest; unittest.main(". arg_tuple .")\""
+
+    return cmd
+endfunction
+
+function! s:BuildTestOOBCommand(test_file, test_case, test_method)
+    let cmd = "testoob ". a:test_file
+    if !empty(a:test_case)
+        let cmd = cmd ." ". a:test_case
+        let cmd = empty(a:test_method) ? cmd : cmd .".". a:test_method 
     endif
-    return './alltests.py ' . a:test_name ." ". test_arg . s:test_command_suffix
-    "return s:test_command_prefix . a:test_name ." ". test_arg . s:test_command_suffix
+
+    return cmd
 endfunction
 
-" ./somefile.ext => ./somefile_test.ext
-function! s:ConvertFilename2TestFilename(filename)
-    let [name, ext] = s:SplitFilename(a:filename)
-    return s:test_filename_prefix .name. s:test_filename_suffix. ".".ext
-endfunction
-
-" ./somefile_test.ext => ./somefile.ext
-function! s:ConvertTestFilename2Filename(filename)
-    return substitute(a:filename, s:test_filename_prefix .'\(.*\)'. s:test_filename_suffix, '\1', '')
-endfunction
-
-
-" add test directory to path
-" ./somepath/ => ./somepath/test/
-function! s:ConvertPath2TestPath(path)
-    " relative path
-    let path = fnamemodify(a:path, ":p")
-
-    let result = path.'/'. s:test_directory .'/'
-    let duplication_removed = substitute(result, '//\+', '/', "")
-    return duplication_removed
-endfunction
-
-" strip test at the end if exist
-" ./somepath/test/ => ./somepath
-function! s:ConvertTestPath2Path(path)
-    return substitute(simplify(a:path), s:test_directory.'/\?$', '', "")
-endfunction
-
-function! s:ConvertFullTestFilename2FullFilename(full_filename)
-    let path     = fnamemodify(a:full_filename, ":p:h")
-    let filename = fnamemodify(a:full_filename, ":p:t")
-    return s:ConvertTestPath2Path(path) .'/'. s:ConvertTestFilename2Filename(filename)
-endfunction
-
-function! s:ConvertFullFilename2FullTestFilename(full_filename)
-    let path     = fnamemodify(a:full_filename, ":p:h")
-    let filename = fnamemodify(a:full_filename, ":p:t")
-    return s:ConvertPath2TestPath(path) . s:ConvertFilename2TestFilename(filename)
-endfunction
-
-
-" return list of name and extension
-function! s:SplitFilename(filename)
-    let pattern = '\(.*\)\.\([^.]*\)'
-    let name = substitute(a:filename, pattern, '\1', "")
-    let ext  = substitute(a:filename, pattern, '\2', "")
-    return [name, ext]
-endfunction
-
-
-function! s:OpenFile(filepath)
-    execute("e " . a:filepath)
-endfunction
-
-
-" change to the test file of the source code, or vice versa
+" change from source code to test code or vice versa
 function! s:JumpFile()
-    let full_filename = expand("%:p")
+    let full_filename = s:GetFullFilename()
 
     " set alternate file name and path
     if s:IsTestFile(full_filename)
@@ -98,52 +62,59 @@ function! s:JumpFile()
     end
 endfunction
 
-function! s:SetLocal(option_name, value)
-    let previous_value = eval('&'. a:option_name)
-    let escaped_value  = escape(a:value, ' ')
-    execute 'setlocal '. a:option_name .'='. escaped_value
-    return previous_value
+function! s:ExecuteCommandByMakeprg(command, bang)
+    let previous_makeprg = s:SetLocal('makeprg', a:command)
+    echo &makeprg
+    "(a:bang==1) ? make! : make
+    execute 'make'.(a:bang ? '!' : '')
+    call s:SetLocal('makeprg', previous_makeprg)
 endfunction
 
-function! s:RunTestCommand(test_file, test_suit, test_case)
-    let test_command = s:GenerateTestCommand(a:test_file, a:test_suit, a:test_case)
-    let previous_make_prg = s:SetLocal('makeprg', test_command)
-
-    " run test
-    make 
-
-    call s:SetLocal('makeprg', previous_make_prg)
+function! s:RunTestCommand(test_file, test_case, test_method, bang)
+    let test_directory = s:ExtractPath(a:test_file)
+    let previous_directory = s:ChangeDirectoryTo(test_directory)
+    let test_command = s:GenerateTestCommand(a:test_file, a:test_case, a:test_method)
+    call s:ExecuteCommandByMakeprg(test_command, a:bang)
+    call s:ChangeDirectoryTo(previous_directory)
 endfunction
 
-function! s:RunTest()
-    let full_filename=expand("%:p")
+" run appropriate test
+function! s:RunTest(bang)
+    let full_filename = s:GetFullFilename()
 
-    " set test file name
     if s:IsTestFile(full_filename)
         let test_file = full_filename
         let test_case_class    = s:IsInTestCaseClass()
         let single_test_method = s:IsInSingleTestMethod()
+
+        call s:RunTestCommand(test_file, test_case_class, single_test_method, a:bang)
     else
         let test_file = s:ConvertFullFilename2FullTestFilename(full_filename)
-        let test_case_class    = ''
-        let single_test_method = ''
+        call s:RunTestCommand(test_file, '', '', a:bang)
     endif
-
-    " run test: !testoob test/file_to_test.py SomeTestCase.test_method
-    call s:RunTestCommand(test_file, test_case_class, single_test_method)
 endfunction
 
-" returns 1 if given string has 'test', ignoring case
-" returns 0 if not
-function! s:HasWordTest(filename)
-    let filename_no_ext   = fnamemodify(a:filename, ":r")
-    let test_file_pattern = '\c^'.s:test_filename_prefix.'.*'.s:test_filename_suffix.'$'
-    let matched_index = match(filename_no_ext, test_file_pattern)
-    if matched_index != -1
-        return 1 
-    else
-        return 0
+" run all tests
+function! s:RunAllTests(bang)
+    let full_filename = s:GetFullFilename()
+    let test_directory = s:ExtractPath(full_filename)
+    if s:IsTestFile(full_filename) 
+        let test_directory = s:ConvertTestPath2Path(s:ExtractPath(full_filename))
     endif
+    let previous_directory = s:ChangeDirectoryTo(test_directory)
+
+    "let run_default_all_tests = 0
+    " if alltests.py exists and works
+    if filereadable(s:default_alltests_script_name)
+        let cmd = 'python '. s:default_alltests_script_name
+        call s:ExecuteCommandByMakeprg(cmd, a:bang)
+
+    " if user cannot run their own alltests.py
+    else
+        call s:ExecuteCommandByMakeprg(s:default_alltests_py, a:bang)
+    endif
+    
+    call s:ChangeDirectoryTo(previous_directory)
 endfunction
 
 " return 1 if given filename is test file, 0 if not
@@ -209,19 +180,128 @@ function! s:IsMethodLine(line)
     return match(a:line, method_pattern) != -1
 endfunction
 
+function! s:SetLocal(option_name, value)
+    let previous_value = eval('&'. a:option_name)
+    let escaped_value  = escape(a:value, ' "')
+    execute 'setlocal '. a:option_name .'='. escaped_value
+    return previous_value
+endfunction
 
 function! s:SaveCurrentLine()
-    let full_filepath=expand("%:p")
+    let full_filepath = s:GetFullFilename()
     let s:last_line_saves[full_filepath] = winsaveview()
 endfunction
 
 function! s:LoadLastLine()
-    let full_filepath=expand("%:p")
+    let full_filepath = s:GetFullFilename()
     if has_key(s:last_line_saves, full_filepath)
         call winrestview(s:last_line_saves[full_filepath])
     endif
 endfunction
 
+" ./somefile.ext => ./somefile_test.ext
+function! s:ConvertFilename2TestFilename(filename)
+    let [name, ext] = s:SplitFilename(a:filename)
+    return s:test_filename_prefix .name. s:test_filename_suffix. ".".ext
+endfunction
+
+" ./somefile_test.ext => ./somefile.ext
+function! s:ConvertTestFilename2Filename(filename)
+    return substitute(a:filename, s:test_filename_prefix .'\(.*\)'. s:test_filename_suffix, '\1', '')
+endfunction
+
+
+" add test directory to path
+" ./somepath/ => ./somepath/test/
+function! s:ConvertPath2TestPath(path)
+    " relative path
+    let path = fnamemodify(a:path, ":p")
+
+    let result = path.'/'. s:test_directory .'/'
+    let duplication_removed = substitute(result, '//\+', '/', "")
+    return duplication_removed
+endfunction
+
+" strip test at the end if exist
+" ./somepath/test/ => ./somepath
+function! s:ConvertTestPath2Path(path)
+    return substitute(simplify(a:path), s:test_directory.'/\?$', '', "")
+endfunction
+
+function! s:ConvertFullTestFilename2FullFilename(full_filename)
+    let path     = fnamemodify(a:full_filename, ":p:h")
+    let filename = fnamemodify(a:full_filename, ":p:t")
+    return s:ConvertTestPath2Path(path) .'/'. s:ConvertTestFilename2Filename(filename)
+endfunction
+
+function! s:ConvertFullFilename2FullTestFilename(full_filename)
+    let path     = fnamemodify(a:full_filename, ":p:h")
+    let filename = fnamemodify(a:full_filename, ":p:t")
+    return s:ConvertPath2TestPath(path) . s:ConvertFilename2TestFilename(filename)
+endfunction
+
+" returns 1 if given string has 'test', ignoring case
+" returns 0 if not
+function! s:HasWordTest(filename)
+    let filename_no_ext   = fnamemodify(a:filename, ":r")
+    let test_file_pattern = '\c^'.s:test_filename_prefix.'.*'.s:test_filename_suffix.'$'
+    let matched_index = match(filename_no_ext, test_file_pattern)
+    if matched_index != -1
+        return 1 
+    else
+        return 0
+    endif
+endfunction
+
+
+
+""
+"" Utility functions
+""
+
+"
+" Files and Paths
+"
+
+" open a file
+function! s:OpenFile(filepath)
+    execute("e " . a:filepath)
+endfunction
+
+function! s:ChangeDirectoryTo(directory)
+    let current_directory = s:GetPath()
+    exec 'lcd '. a:directory
+    return current_directory
+endfunction
+
+" /full/path/filename.ext
+function! s:GetFullFilename()
+    return expand("%:p")
+endfunction
+
+function! s:GetPath()
+    return expand("%:p:h")
+endfunction
+
+function! s:ExtractPath(full_filename)
+    return fnamemodify(a:full_filename, ":p:h")
+endfunction
+
+" return list of name and extension
+function! s:SplitFilename(filename)
+    let pattern = '\(.*\)\.\([^.]*\)'
+    let name = substitute(a:filename, pattern, '\1', "")
+    let ext  = substitute(a:filename, pattern, '\2', "")
+    return [name, ext]
+endfunction
+
+function! s:RemoveExtension(filename)
+    return fnamemodify(a:filename, ":r")
+endfunction
+
+
+
 command! T  :call s:JumpFile()
-command! TT :call s:RunTest()
+command! -bang TT :call s:RunTest(<bang>0)
+command! -bang TA :call s:RunAllTests(<bang>0)
 
