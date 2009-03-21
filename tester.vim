@@ -1,15 +1,17 @@
-" TODO
-"  - show error in quickfix
 
+" add.py -> test/add_test.py
 let s:test_directory='test'
-
 let s:test_filename_prefix=''
 let s:test_filename_suffix='_test'
+
+" add.py -> test_add.py
+"let s:test_directory=''
+"let s:test_filename_prefix='test_'
+"let s:test_filename_suffix=''
 
 "let s:test_command='unittest'
 let s:test_command='testoob'
 
-let s:default_alltests_script_name = "./alltests.py"
 let s:default_alltests_py = "python -c \"import unittest, sys, os, re; sys.path.append(os.curdir); t_py_re = re.compile('^t(est)?_.*\.py$'); is_test = lambda filename: t_py_re.match(filename); drop_dot_py = lambda filename: filename[:-3]; modules_to_test = [drop_dot_py(module) for module in filter(is_test, os.listdir(os.curdir))]; print 'Testing', ', '.join(modules_to_test); alltests = unittest.TestSuite(); [alltests.addTest(unittest.findTestCases(module)) for module in map(__import__, modules_to_test)]; call_alltests = lambda: alltests; unittest.main(defaultTest='call_alltests')\""
 
 let s:last_line_saves={}
@@ -62,11 +64,14 @@ function! s:JumpFile()
     end
 endfunction
 
+function! s:ExecuteMake(bang)
+    execute 'make'.(a:bang ? '!' : '')
+endfunction
+
 function! s:ExecuteCommandByMakeprg(command, bang)
     let previous_makeprg = s:SetLocal('makeprg', a:command)
-    echo &makeprg
-    "(a:bang==1) ? make! : make
-    execute 'make'.(a:bang ? '!' : '')
+    "echo getcwd() ."$ ". &makeprg
+    call s:ExecuteMake(a:bang)
     call s:SetLocal('makeprg', previous_makeprg)
 endfunction
 
@@ -89,7 +94,9 @@ function! s:RunTest(bang)
 
         call s:RunTestCommand(test_file, test_case_class, single_test_method, a:bang)
     else
+        echo full_filename
         let test_file = s:ConvertFullFilename2FullTestFilename(full_filename)
+        echo test_file
         call s:RunTestCommand(test_file, '', '', a:bang)
     endif
 endfunction
@@ -104,12 +111,14 @@ function! s:RunAllTests(bang)
     let previous_directory = s:ChangeDirectoryTo(test_directory)
 
     "let run_default_all_tests = 0
-    " if alltests.py exists and works
-    if filereadable(s:default_alltests_script_name)
-        let cmd = 'python '. s:default_alltests_script_name
-        call s:ExecuteCommandByMakeprg(cmd, a:bang)
+    " if user has some makeprg
+    let makeprg_value = &makeprg
+    if makeprg_value != "make"
+        "let cmd = 'python '. s:default_alltests_script_name
+        "call s:ExecuteCommandByMakeprg(cmd, a:bang)
+        call s:ExecuteMake(a:bang)
 
-    " if user cannot run their own alltests.py
+    " if user doesn't have specific makeprg
     else
         call s:ExecuteCommandByMakeprg(s:default_alltests_py, a:bang)
     endif
