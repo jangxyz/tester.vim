@@ -6,8 +6,7 @@ let s:test_directory='test'
 let s:test_filename_prefix=''
 let s:test_filename_suffix='_test'
 
-"let s:test_command_prefix='!python test/'
-let s:test_command_prefix='!testoob '
+let s:test_command_prefix='testoob '
 let s:test_command_suffix=''
 
 let s:last_line_saves={}
@@ -47,7 +46,7 @@ endfunction
 " strip test at the end if exist
 " ./somepath/test/ => ./somepath
 function! s:ConvertTestPath2Path(path)
-    return substitute(simplify(a:path), 'test/\?$', '', "")
+    return substitute(simplify(a:path), s:test_directory.'/\?$', '', "")
 endfunction
 
 function! s:ConvertFullTestFilename2FullFilename(full_filename)
@@ -80,22 +79,15 @@ endfunction
 " change to the test file of the source code, or vice versa
 function! s:JumpFile()
     let full_filename = expand("%:p")
-    let filename=expand("%:p:t")
-    let path=expand("%:p:h")
 
     " set alternate file name and path
-    if s:IsTestFile(filename)
-        "let a_filename = s:ConvertTestFilename2Filename(filename)
-        "let a_path = s:ConvertTestPath2Path(path)
+    if s:IsTestFile(full_filename)
         let full_a_filename = s:ConvertFullTestFilename2FullFilename(full_filename)
     else
-        "let a_filename = s:ConvertFilename2TestFilename(filename)
-        "let a_path = s:ConvertPath2TestPath(path)
         let full_a_filename = s:ConvertFullFilename2FullTestFilename(full_filename)
     endif
 
     " check if file exists
-    "let full_a_filepath = a_path . a_filename
     if filereadable(full_a_filename)
         call s:SaveCurrentLine()         " save current position
         call s:OpenFile(full_a_filename)
@@ -105,51 +97,58 @@ function! s:JumpFile()
     end
 endfunction
 
-"function! s:RunTestCommand(testing_directory, test_name)
-function! s:RunTestCommand(test_file, test_suit, test_case)
-    "let tempfile = tempname()
-    let test_command = s:GenerateTestCommand(a:test_file, a:test_suit, a:test_case)
-    "let current_directory=getcwd()
-    echo test_command
+function! s:SetLocal(option_name, value)
+    let previous_value = eval('&'. a:option_name)
+    let escaped_value  = escape(a:value, ' ')
+    execute 'setlocal '. a:option_name .'='. escaped_value
+    return previous_value
+endfunction
 
-    "execute 'lcd '. a:testing_directory
-    execute test_command
-    "execute 'lcd '. current_directory
+function! s:RunTestCommand(test_file, test_suit, test_case)
+    let test_command = s:GenerateTestCommand(a:test_file, a:test_suit, a:test_case)
+    let previous_make_prg = s:SetLocal('makeprg', test_command)
+
+    " run test
+    make 
+
+    call s:SetLocal('makeprg', previous_make_prg)
 endfunction
 
 function! s:RunTest()
     let full_filename=expand("%:p")
-    let path=expand("%:p:h")
 
     " set test file name
-    let test_name = ''
-    let test_case_class    = ''
-    let single_test_method = ''
     if s:IsTestFile(full_filename)
         let test_file = full_filename
-        "let testing_directory = s:ConvertTestPath2Path(path)
         let test_case_class    = s:IsInTestCaseClass()
         let single_test_method = s:IsInSingleTestMethod()
     else
         let test_file = s:ConvertFullFilename2FullTestFilename(full_filename)
-        "let testing_directory = path
+        let test_case_class    = ''
+        let single_test_method = ''
     endif
 
-    " run test: !python -m test.file_to_test
-    "call s:RunTestCommand(testing_directory, test_name)
+    " run test: !testoob test/file_to_test.py SomeTestCase.test_method
     call s:RunTestCommand(test_file, test_case_class, single_test_method)
 endfunction
 
 " returns 1 if given string has 'test', ignoring case
 " returns 0 if not
 function! s:HasWordTest(filename)
-    let matched_index = match(a:filename, '\ctest')
-    return matched_index != -1
+    let filename_no_ext   = fnamemodify(a:filename, ":r")
+    let test_file_pattern = '\c^'.s:test_filename_prefix.'.*'.s:test_filename_suffix.'$'
+    let matched_index = match(filename_no_ext, test_file_pattern)
+    if matched_index != -1
+        return 1 
+    else
+        return 0
+    endif
 endfunction
 
 " return 1 if given filename is test file, 0 if not
-function! s:IsTestFile(filename)
-    return s:HasWordTest(a:filename)
+function! s:IsTestFile(full_filename)
+    let filename = fnamemodify(a:full_filename, ":t")
+    return s:HasWordTest(filename)
 endfunction
 
 " TODO: 
@@ -209,6 +208,7 @@ function! s:IsMethodLine(line)
     return match(a:line, method_pattern) != -1
 endfunction
 
+
 function! s:SaveCurrentLine()
     let full_filepath=expand("%:p")
     let s:last_line_saves[full_filepath] = winsaveview()
@@ -223,5 +223,4 @@ endfunction
 
 command! T  :call s:JumpFile()
 command! TT :call s:RunTest()
-
 
