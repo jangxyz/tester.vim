@@ -1,3 +1,5 @@
+" TODO: 
+"  - TT should also run single test method on source file
 
 " add.py -> test/add_test.py
 let s:test_directory='test'
@@ -87,17 +89,22 @@ endfunction
 function! s:RunTest(bang)
     let full_filename = s:GetFullFilename()
 
+    echo '[RunTest] s:RunTest..'
     if s:IsTestFile(full_filename)
         let test_file = full_filename
         let test_case_class    = s:IsInTestCaseClass()
         let single_test_method = s:IsInSingleTestMethod()
-
         call s:RunTestCommand(test_file, test_case_class, single_test_method, a:bang)
     else
-        echo full_filename
-        let test_file = s:ConvertFullFilename2FullTestFilename(full_filename)
-        echo test_file
-        call s:RunTestCommand(test_file, '', '', a:bang)
+        "let test_file = s:ConvertFullFilename2FullTestFilename(full_filename)
+        "call s:RunTestCommand(test_file, '', '', a:bang)
+        call s:JumpFile()
+        let test_file = s:GetFullFilename()
+        let test_case_class    = s:IsInTestCaseClass()
+        let single_test_method = s:IsInSingleTestMethod()
+
+        call s:JumpFile()
+        call s:RunTestCommand(test_file, test_case_class, single_test_method, a:bang)
     endif
 endfunction
 
